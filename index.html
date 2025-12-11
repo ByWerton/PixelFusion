@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PixelFusion Lab v2.1 - Fixed</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                fontFamily: {
+                    sans: ['Outfit', 'sans-serif'],
+                    mono: ['JetBrains Mono', 'monospace'],
+                },
+                extend: {
+                    colors: {
+                        bg: '#0f172a',
+                        surface: '#1e293b',
+                        surfaceHighlight: '#334155',
+                        primary: '#6366f1',
+                        secondary: '#22d3ee',
+                        accent: '#f472b6',
+                        gold: '#fbbf24',
+                        success: '#10b981',
+                        danger: '#ef4444'
+                    }
+                }
+            }
+        }
+        const LOGO_URL = 'https://raw.githubusercontent.com/ByWerton/PixelFusion/refs/heads/main/PixelFusion_20251210_210311_0000.png';
+    </script>
+
+    <style>
+        body { background-color: #0f172a; color: #f1f5f9; font-family: 'Outfit', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 3px; }
+        
+        .glass { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .sidebar { transition: transform 0.3s ease; }
+        .sidebar-closed { transform: translateX(-100%); }
+        .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #6366f1; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .chat-bubble-me { background: #6366f1; color: white; border-radius: 12px 12px 0 12px; }
+        .chat-bubble-other { background: #334155; color: white; border-radius: 12px 12px 12px 0; }
+        
+        #mobile-controls { pointer-events: none; }
+        .control-interactive { pointer-events: auto; }
+        #jump-btn {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(6px);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; user-select: none;
+            transition: background 0.1s;
+        }
+        #jump-btn:active { background: rgba(99, 102, 241, 0.7); }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col overflow-hidden">
+
+    <!-- Auth Overlay -->
+    <div id="auth-overlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-lg p-4 overflow-y-auto">
+        <div class="glass w-full max-w-md p-8 rounded-2xl shadow-2xl relative border-t-4 border-primary my-auto">
+            
+            <div class="flex justify-center mb-8">
+                <img src="${LOGO_URL}" alt="Logo" class="h-20 w-auto object-contain drop-shadow-[0_0_20px_rgba(99,102,241,0.6)]" onerror="this.src='https://placehold.co/100x100?text=PF'">
+            </div>
+
+            <!-- Loading State -->
+            <div id="auth-loading" class="text-center p-8">
+                <div class="spinner mx-auto mb-4"></div>
+                <p class="text-gray-400 font-mono text-sm">Sunucuya bağlanılıyor...</p>
+                <p id="auth-status" class="text-xs text-gray-600 mt-2">Kimlik doğrulanıyor</p>
+            </div>
+
+            <!-- Registration Form (Only shows if no profile exists) -->
+            <div id="form-register" class="space-y-4 hidden animate-fade-in">
+                <h2 class="text-center text-2xl font-bold text-white">Profil Oluştur</h2>
+                <p class="text-xs text-center text-gray-500 mb-2">Devam etmek için bir kimlik belirle.</p>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <input type="text" id="reg-id" placeholder="Benzersiz ID (Kullanıcı Adı) *" class="bg-bg border border-gray-600 rounded-lg p-3 text-white focus:border-secondary outline-none text-sm">
+                    <input type="text" id="reg-display" placeholder="Takma Ad (Görünen) *" class="bg-bg border border-gray-600 rounded-lg p-3 text-white focus:border-secondary outline-none text-sm">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <input type="number" id="reg-age" placeholder="Yaş" class="bg-bg border border-gray-600 rounded-lg p-3 text-white focus:border-secondary outline-none text-sm">
+                     <select id="reg-gender" class="bg-bg border border-gray-600 rounded-lg p-3 text-gray-300 focus:border-secondary outline-none text-sm">
+                        <option value="other">Diğer</option>
+                        <option value="male">Erkek</option>
+                        <option value="female">Kız</option>
+                    </select>
+                </div>
+
+                <button onclick="app.createProfile()" class="w-full bg-gradient-to-r from-secondary to-cyan-600 hover:from-cyan-500 hover:to-cyan-700 text-black font-bold py-3 rounded-lg shadow-lg shadow-secondary/25 transition mt-2">BAŞLA</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="glass sticky top-0 z-40 border-b border-gray-700 h-16 flex items-center justify-between px-4">
+        <div class="flex items-center gap-4">
+            <button onclick="app.toggleSidebar()" class="lg:hidden text-white text-xl"><i class="fa-solid fa-bars"></i></button>
+            <div class="flex items-center gap-2 cursor-pointer" onclick="app.router('home')">
+                <img src="${LOGO_URL}" class="h-8 w-auto" onerror="this.style.display='none'">
+                <span class="font-bold text-lg hidden md:block text-white tracking-wide">PixelFusion</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="bg-bg border border-gray-600 rounded-full px-4 py-1.5 flex items-center gap-2 shadow-inner">
+                <i class="fa-solid fa-coins text-gold animate-pulse"></i>
+                <span id="nav-renax" class="font-mono font-bold text-gold">0</span>
+            </div>
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="app.router('profile')">
+                <div class="text-right hidden md:block">
+                    <div id="nav-display" class="text-sm font-bold text-white group-hover:text-primary transition">Yükleniyor...</div>
+                    <div id="nav-id" class="text-[10px] text-gray-400">@...</div>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-surfaceHighlight border-2 border-primary overflow-hidden relative">
+                     <img id="nav-avatar-img" src="" class="w-full h-full object-cover">
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Layout -->
+    <div class="flex flex-1 overflow-hidden relative">
+        <aside id="sidebar" class="absolute lg:static w-64 h-full bg-surface border-r border-gray-700 z-30 sidebar sidebar-closed lg:translate-x-0 flex flex-col">
+            <div class="p-4 space-y-2 flex-1 overflow-y-auto">
+                <button onclick="app.router('home')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-house w-6 text-center text-primary"></i> Ana Sayfa</button>
+                <button onclick="app.router('games')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-gamepad w-6 text-center text-secondary"></i> Oyunlar</button>
+                <button onclick="app.router('groups')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-users w-6 text-center text-green-400"></i> Gruplar</button>
+                <button onclick="app.router('chat')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-comments w-6 text-center text-accent"></i> Sohbet</button>
+                <button onclick="app.router('shop')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-shirt w-6 text-center text-orange-400"></i> Mağaza</button>
+                <div class="border-t border-gray-700 my-2"></div>
+                <button onclick="app.router('create')" class="nav-btn w-full text-left p-3 rounded bg-gradient-to-r from-primary/20 to-transparent border-l-4 border-primary text-white flex items-center gap-3"><i class="fa-solid fa-code w-6 text-center"></i> Studio</button>
+                <button onclick="app.router('assets')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-folder-open w-6 text-center"></i> Dosyalar</button>
+                <button onclick="app.router('avatar')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-user-astronaut w-6 text-center text-purple-400"></i> Avatar</button>
+                <button onclick="app.router('profile')" class="nav-btn w-full text-left p-3 rounded hover:bg-white/5 text-gray-300 flex items-center gap-3"><i class="fa-solid fa-id-badge w-6 text-center text-gray-400"></i> Profil</button>
+            </div>
+            <div class="p-4 border-t border-gray-700">
+                <button onclick="location.reload()" class="w-full text-left p-3 rounded text-red-400 hover:bg-red-500/10 flex items-center gap-3"><i class="fa-solid fa-power-off"></i> Yenile</button>
+            </div>
+        </aside>
+
+        <main id="main-content" class="flex-1 overflow-y-auto bg-bg p-4 lg:p-6 relative">
+            
+            <!-- HOME VIEW -->
+            <section id="view-home" class="animate-fade-in space-y-8 hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass p-6 rounded-2xl border-l-4 border-primary">
+                        <h2 class="text-2xl font-bold mb-2">Hoşgeldin, <span class="user-display-name text-primary">...</span></h2>
+                        <p class="text-gray-400 mb-4">PixelFusion Lab v2.1 (Fixed) devrede.</p>
+                        <button onclick="app.router('games')" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-bold transition">Oyunlara Git</button>
+                    </div>
+                    <div class="glass p-6 rounded-2xl border-l-4 border-gold">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h2 class="text-xl font-bold text-gold">Renax Durumu</h2>
+                                <p class="text-3xl font-mono mt-2" id="home-renax">0</p>
+                            </div>
+                            <i class="fa-solid fa-wallet text-4xl text-white/10"></i>
+                        </div>
+                        <button onclick="app.router('shop')" class="mt-4 text-sm text-gold hover:underline">Harca <i class="fa-solid fa-arrow-right"></i></button>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- GAMES VIEW -->
+            <section id="view-games" class="hidden animate-fade-in">
+                <h2 class="text-2xl font-bold mb-6 flex items-center gap-2"><i class="fa-solid fa-gamepad text-secondary"></i> Popüler Oyunlar</h2>
+                <div id="games-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+            </section>
+
+            <!-- GROUPS VIEW -->
+            <section id="view-groups" class="hidden animate-fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold flex items-center gap-2"><i class="fa-solid fa-users text-green-400"></i> Topluluklar</h2>
+                    <button onclick="app.createGroupPrompt()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-green-600/20">
+                        <i class="fa-solid fa-plus"></i> Grup Kur (100 R)
+                    </button>
+                </div>
+                <div id="groups-list" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+            </section>
+
+            <!-- CHAT VIEW -->
+            <section id="view-chat" class="hidden h-[calc(100vh-100px)] flex flex-col glass rounded-2xl overflow-hidden border border-gray-700">
+                <div class="p-4 border-b border-gray-700 bg-surface/50 backdrop-blur flex justify-between items-center">
+                    <span class="font-bold">Genel Sohbet</span>
+                    <span class="text-xs text-green-400"><i class="fa-solid fa-circle text-[8px]"></i> Canlı</span>
+                </div>
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-bg/50"></div>
+                <div class="p-3 bg-surface border-t border-gray-700 flex items-center gap-2">
+                    <input type="text" id="chat-input" placeholder="Mesaj yaz..." class="flex-1 bg-bg border border-gray-600 rounded-full px-4 py-2 focus:border-primary outline-none text-sm">
+                    <button onclick="app.sendChatMessage()" class="bg-primary hover:bg-indigo-500 text-white w-10 h-10 rounded-full flex items-center justify-center transition"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </section>
+
+            <!-- SHOP VIEW -->
+            <section id="view-shop" class="hidden animate-fade-in">
+                <h2 class="text-2xl font-bold mb-6 flex items-center gap-2"><i class="fa-solid fa-shirt text-orange-400"></i> Aksesuar Mağazası</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4" id="shop-grid"></div>
+            </section>
+            
+            <!-- STUDIO VIEW -->
+            <section id="view-create" class="hidden h-full flex flex-col animate-fade-in pb-20">
+                <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
+                    <h2 class="text-2xl font-bold text-white"><i class="fa-solid fa-code text-primary mr-2"></i> Studio</h2>
+                    <div class="flex gap-2">
+                        <button onclick="app.testGame()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm font-bold"><i class="fa-solid fa-play"></i> Test Et</button>
+                        <button onclick="app.publishGame()" class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded text-sm font-bold"><i class="fa-solid fa-upload"></i> YAYINLA</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+                    <div class="bg-surface p-4 rounded-xl border border-gray-700 overflow-y-auto max-h-[calc(100vh-150px)]">
+                        <h3 class="font-bold text-primary mb-2">Oyun Detayları</h3>
+                        <div class="space-y-3">
+                            <input type="text" id="game-title" placeholder="Oyun Adı" class="w-full bg-bg border border-gray-600 rounded p-2 text-white text-sm">
+                            <select id="game-genre" class="w-full bg-bg border border-gray-600 rounded p-2 text-gray-300 text-sm">
+                                <option value="arcade">Arcade</option>
+                                <option value="action">Aksiyon</option>
+                                <option value="rpg">RPG</option>
+                            </select>
+                            <textarea id="game-desc" rows="3" placeholder="Açıklama" class="w-full bg-bg border border-gray-600 rounded p-2 text-white text-sm"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 flex flex-col bg-[#1e1e1e] rounded-xl border border-gray-700 overflow-hidden shadow-2xl">
+                        <div class="bg-[#2d2d2d] px-4 py-2 flex justify-between items-center text-xs">
+                            <span class="font-mono text-yellow-500">game_source.html</span>
+                            <div class="flex gap-2">
+                                <button onclick="app.insertCode('basic')" class="text-gray-300 border border-gray-600 px-2 py-1 rounded">Basit Şablon</button>
+                            </div>
+                        </div>
+                        <textarea id="game-code" class="flex-1 bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm p-4 outline-none resize-none" spellcheck="false"></textarea>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- ASSETS VIEW -->
+            <section id="view-assets" class="hidden animate-fade-in">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold border-l-4 border-yellow-500 pl-3">Raw Varlıklarım</h2>
+                    <label class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded cursor-pointer text-sm font-bold flex items-center gap-2 control-interactive">
+                        <i class="fa-solid fa-cloud-upload"></i> Yükle
+                        <input type="file" hidden accept="image/*" onchange="app.uploadAsset(this)">
+                    </label>
+                </div>
+                <div id="assets-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+            </section>
+
+            <!-- AVATAR VIEW -->
+            <section id="view-avatar" class="hidden animate-fade-in h-full">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+                    <div class="lg:col-span-2 bg-gradient-to-b from-gray-800 to-black rounded-2xl relative border border-gray-700 overflow-hidden flex items-center justify-center">
+                         <canvas id="r6-canvas" class="w-full h-full"></canvas>
+                    </div>
+                    <div class="bg-surface p-6 rounded-2xl border border-gray-700 overflow-y-auto">
+                        <h3 class="text-xl font-bold mb-4 text-white">Renkler</h3>
+                        <div class="space-y-2">
+                            <label class="text-xs flex justify-between">Kafa <input type="color" id="col-head" onchange="app.updateR6Color()"></label>
+                            <label class="text-xs flex justify-between">Gövde <input type="color" id="col-torso" onchange="app.updateR6Color()"></label>
+                            <label class="text-xs flex justify-between">Kollar <input type="color" id="col-arms" onchange="app.updateR6Color()"></label>
+                            <label class="text-xs flex justify-between">Bacaklar <input type="color" id="col-legs" onchange="app.updateR6Color()"></label>
+                            <button onclick="app.saveAvatarR6()" class="w-full bg-primary hover:bg-indigo-600 text-white py-2 mt-4 rounded font-bold">KAYDET</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PROFILE VIEW -->
+            <section id="view-profile" class="hidden animate-fade-in max-w-4xl mx-auto">
+                 <div class="glass rounded-2xl p-8 border-t-4 border-primary text-center relative overflow-hidden">
+                     <div class="relative w-32 h-32 mx-auto mb-4">
+                        <img id="profile-img-lg" src="" class="w-full h-full rounded-full border-4 border-surface bg-gray-800 object-cover relative z-10">
+                     </div>
+                     <h2 id="profile-display" class="text-3xl font-bold text-white">...</h2>
+                     <p id="profile-id-full" class="text-primary font-mono text-sm mt-1">@...</p>
+                     
+                     <div class="grid grid-cols-2 gap-4 mt-8 text-left">
+                         <div class="bg-bg p-4 rounded-xl border border-gray-700 text-center">
+                             <div class="text-gray-400 text-xs">YAŞ</div>
+                             <div id="profile-age" class="font-bold">0</div>
+                         </div>
+                         <div class="bg-bg p-4 rounded-xl border border-gray-700 border-gold/30 text-center">
+                             <div class="text-gold text-xs">RENAX</div>
+                             <div id="profile-renax-lg" class="font-bold text-gold">0</div>
+                         </div>
+                     </div>
+                 </div>
+            </section>
+
+        </main>
+    </div>
+    
+    <!-- Game Modal -->
+    <div id="play-modal" class="fixed inset-0 z-[200] hidden bg-black flex flex-col">
+        <div class="bg-gray-900 p-2 flex justify-between items-center border-b border-gray-800">
+            <h3 id="play-title" class="text-white font-mono ml-2">Oyun</h3>
+            <button onclick="app.closeGame()" class="bg-red-600 text-white px-4 py-1 rounded font-bold text-sm">KAPAT</button>
+        </div>
+        <div class="flex-1 relative flex justify-center items-center bg-black">
+            <iframe id="play-frame" class="w-full h-full border-none" allow="autoplay; fullscreen"></iframe>
+            <div id="mobile-controls" class="absolute inset-0 w-full h-full z-10 hidden">
+                <div id="joystick-area" class="control-interactive absolute bottom-10 left-10 w-32 h-32"></div>
+                <div id="jump-btn" class="control-interactive absolute bottom-12 right-10 w-20 h-20 text-white text-sm">ZIPLA</div>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // --- V11 MODÜLER IMPORT (Ortam Uyumlu) ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, query, where, getDocs, addDoc, onSnapshot, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ORTAM DEĞİŞKENLERİNDEN KONFİGÜRASYON ALMA (Sabit Key Yerine)
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app_fb = initializeApp(firebaseConfig);
+        const auth = getAuth(app_fb);
+        const db = getFirestore(app_fb);
+        
+        // __app_id varsa kullan, yoksa default (Veri izolasyonu için)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- GLOBAL VARIABLES ---
+        let currentUser = null;
+        let userData = null;
+        let r6Engine = { scene: null, camera: null, renderer: null, parts: {}, group: null, animationId: null, clock: new THREE.Clock() };
+        
+        const defaultAvatarColors = { head:'#fbbf24', torso:'#3b82f6', arms:'#fbbf24', legs:'#22c55e' };
+        
+        const SwalToast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true });
+
+        // --- APP LOGIC ---
+        window.app = {
+            
+            // 1. BAŞLATMA (Ortamın Token'ı ile Giriş)
+            init: async () => {
+                const statusEl = document.getElementById('auth-status');
+                statusEl.innerText = "Kimlik Token'ı alınıyor...";
+
+                try {
+                    // Ortamın sağladığı token varsa kullan, yoksa anonim gir
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Auth Hatası:", error);
+                    statusEl.innerText = "Giriş Hatası! Konsolu kontrol edin.";
+                    return;
+                }
+
+                // Auth durumu izleyici
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        statusEl.innerText = "Profil kontrol ediliyor...";
+                        await app.checkProfile(user.uid);
+                    }
+                });
+            },
+
+            // 2. PROFİL KONTROLÜ (Login yerine geçer)
+            checkProfile: async (uid) => {
+                try {
+                    // Verileri PUBLIC altındaki users koleksiyonundan çekiyoruz ki herkes birbirini görebilsin
+                    const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', uid);
+                    const userSnap = await getDoc(userRef);
+
+                    if (userSnap.exists()) {
+                        // Profil var -> Uygulamayı aç
+                        userData = userSnap.data();
+                        document.getElementById('auth-overlay').classList.add('hidden');
+                        app.updateUI();
+                        app.initR6Engine();
+                        app.listenChat();
+                        app.router('home');
+                    } else {
+                        // Profil yok -> Kayıt formunu göster
+                        document.getElementById('auth-loading').classList.add('hidden');
+                        document.getElementById('form-register').classList.remove('hidden');
+                    }
+                } catch (e) {
+                    console.error("Profil Çekme Hatası:", e);
+                    Swal.fire("Hata", "Veri bağlantısında sorun oluştu.", "error");
+                }
+            },
+
+            // 3. PROFİL OLUŞTURMA (Password yok, sadece veri kaydı)
+            createProfile: async () => {
+                const id = document.getElementById('reg-id').value.trim();
+                const display = document.getElementById('reg-display').value.trim();
+                const age = document.getElementById('reg-age').value;
+                const gender = document.getElementById('reg-gender').value;
+
+                if (!id || !display) return SwalToast.fire({ icon: 'warning', title: 'Ad ve ID zorunludur' });
+
+                // Benzersiz ID kontrolü (Basit query)
+                const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+                const q = query(usersRef, where("uniqueId", "==", id));
+                const snap = await getDocs(q);
+
+                if (!snap.empty) return Swal.fire("Hata", "Bu ID zaten alınmış.", "error");
+
+                const newUser = {
+                    uid: currentUser.uid,
+                    uniqueId: id,
+                    displayName: display,
+                    age: age || 0,
+                    gender: gender,
+                    renax: 100, // Başlangıç parası
+                    avatarColors: defaultAvatarColors,
+                    createdAt: Date.now()
+                };
+
+                // Profili kaydet
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid), newUser);
+                
+                // State güncelle ve başlat
+                userData = newUser;
+                document.getElementById('auth-overlay').classList.add('hidden');
+                app.updateUI();
+                app.initR6Engine();
+                app.listenChat();
+                app.router('home');
+            },
+
+            // 4. UI GÜNCELLEME
+            updateUI: () => {
+                if(!userData) return;
+                document.getElementById('nav-renax').innerText = userData.renax;
+                document.getElementById('home-renax').innerText = userData.renax;
+                document.querySelectorAll('.user-display-name').forEach(el => el.innerText = userData.displayName);
+                document.getElementById('nav-display').innerText = userData.displayName;
+                document.getElementById('nav-id').innerText = '@' + userData.uniqueId;
+
+                document.getElementById('profile-display').innerText = userData.displayName;
+                document.getElementById('profile-id-full').innerText = '@' + userData.uniqueId;
+                document.getElementById('profile-age').innerText = userData.age;
+                document.getElementById('profile-renax-lg').innerText = userData.renax;
+                
+                // Renk inputlarını doldur
+                const ac = userData.avatarColors || defaultAvatarColors;
+                document.getElementById('col-head').value = ac.head;
+                document.getElementById('col-torso').value = ac.torso;
+                document.getElementById('col-arms').value = ac.arms;
+                document.getElementById('col-legs').value = ac.legs;
+            },
+
+            router: (view) => {
+                document.querySelectorAll('section[id^="view-"]').forEach(el => el.classList.add('hidden'));
+                document.getElementById(`view-${view}`).classList.remove('hidden');
+                if(window.innerWidth < 1024) document.getElementById('sidebar').classList.add('sidebar-closed');
+                
+                if(view === 'games') app.loadGames();
+                if(view === 'groups') app.loadGroups();
+                if(view === 'shop') app.loadShop();
+                if(view === 'assets') app.loadAssets();
+                if(view === 'avatar') setTimeout(() => app.resizeR6(), 100);
+            },
+
+            toggleSidebar: () => document.getElementById('sidebar').classList.toggle('sidebar-closed'),
+
+            // 5. OYUN & CHAT (Public Veri Yolları)
+            loadGames: async () => {
+                const grid = document.getElementById('games-grid');
+                grid.innerHTML = '<div class="spinner mx-auto"></div>';
+                
+                try {
+                    const gamesRef = collection(db, 'artifacts', appId, 'public', 'data', 'games');
+                    const q = query(gamesRef, orderBy('createdAt', 'desc'), limit(20));
+                    const snap = await getDocs(q);
+                    
+                    grid.innerHTML = '';
+                    if(snap.empty) {
+                        grid.innerHTML = '<div class="col-span-full text-center text-gray-500">Henüz yayınlanmış oyun yok.</div>';
+                        return;
+                    }
+
+                    snap.forEach(doc => {
+                        const g = doc.data();
+                        const gameStr = encodeURIComponent(JSON.stringify(g));
+                        grid.innerHTML += `
+                            <div class="glass rounded-xl overflow-hidden shadow-xl hover:shadow-primary/30 transition">
+                                <div class="h-32 bg-gray-800 flex items-center justify-center text-gray-500 text-3xl font-bold bg-cover bg-center" style="background-image:url('${g.cover || ''}')">
+                                    ${!g.cover ? g.title.substring(0,2) : ''}
+                                </div>
+                                <div class="p-4">
+                                    <h3 class="text-xl font-bold text-white mb-2">${g.title}</h3>
+                                    <div class="flex justify-between text-xs text-gray-400 mb-3">
+                                        <span>${g.genre}</span>
+                                        <span>@${g.publisherName}</span>
+                                    </div>
+                                    <button onclick="app.playGame('${gameStr.replace(/'/g, "\\'")}')" class="w-full bg-primary hover:bg-indigo-600 text-white py-1.5 rounded-lg text-sm font-bold">Oyna</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } catch(e) {
+                    console.error(e);
+                    grid.innerHTML = '<div class="text-red-400">Oyunlar yüklenemedi.</div>';
+                }
+            },
+
+            publishGame: async () => {
+                const title = document.getElementById('game-title').value;
+                const genre = document.getElementById('game-genre').value;
+                const desc = document.getElementById('game-desc').value;
+                const code = document.getElementById('game-code').value;
+
+                if(!title || !code) return SwalToast.fire({icon:'error', title:'Başlık ve Kod gerekli'});
+
+                try {
+                    const gamesRef = collection(db, 'artifacts', appId, 'public', 'data', 'games');
+                    await addDoc(gamesRef, {
+                        title, genre, desc, code,
+                        publisherId: currentUser.uid,
+                        publisherName: userData.displayName,
+                        createdAt: Date.now(),
+                        plays: 0
+                    });
+                    Swal.fire("Başarılı", "Oyun yayınlandı!", "success");
+                    app.router('games');
+                } catch(e) {
+                    Swal.fire("Hata", "Oyun yayınlanamadı.", "error");
+                }
+            },
+
+            listenChat: () => {
+                const chatDiv = document.getElementById('chat-messages');
+                const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'global_chat');
+                const q = query(chatRef, orderBy('timestamp', 'desc'), limit(30));
+
+                onSnapshot(q, (snapshot) => {
+                    const msgs = [];
+                    snapshot.forEach(doc => msgs.push(doc.data()));
+                    msgs.reverse();
+                    
+                    chatDiv.innerHTML = msgs.map(msg => {
+                        const isMe = msg.uid === currentUser.uid;
+                        return `
+                            <div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
+                                <div class="max-w-[80%] p-2 px-3 text-sm ${isMe ? 'chat-bubble-me' : 'chat-bubble-other'}">
+                                    ${!isMe ? `<div class="text-[10px] text-primary font-bold opacity-80">${msg.displayName}</div>` : ''}
+                                    ${msg.text}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    chatDiv.scrollTop = chatDiv.scrollHeight;
+                });
+            },
+
+            sendChatMessage: async () => {
+                const input = document.getElementById('chat-input');
+                const text = input.value.trim();
+                if(!text) return;
+
+                const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'global_chat');
+                await addDoc(chatRef, {
+                    text,
+                    uid: currentUser.uid,
+                    displayName: userData.displayName,
+                    timestamp: Date.now()
+                });
+                input.value = '';
+            },
+
+            // 6. THREE.JS & AVATAR
+            initR6Engine: () => {
+                const canvas = document.getElementById('r6-canvas');
+                if(!canvas || r6Engine.renderer) return;
+
+                r6Engine.scene = new THREE.Scene();
+                r6Engine.camera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+                r6Engine.camera.position.set(0, 1, 6);
+                
+                r6Engine.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+                r6Engine.renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+
+                const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+                const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+                dir.position.set(5, 10, 7);
+                r6Engine.scene.add(ambient, dir);
+
+                r6Engine.group = new THREE.Group();
+                const mat = (c) => new THREE.MeshPhongMaterial({ color: c });
+                
+                // Basit Blok Karakter
+                const head = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat(0xffffff));
+                head.position.y = 1.5;
+                
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 1), mat(0x3b82f6));
+                
+                const la = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), mat(0xffffff)); la.position.set(-1.5, 0, 0);
+                const ra = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), mat(0xffffff)); ra.position.set(1.5, 0, 0);
+                
+                const ll = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2, 0.9), mat(0x22c55e)); ll.position.set(-0.5, -2, 0);
+                const rl = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2, 0.9), mat(0x22c55e)); rl.position.set(0.5, -2, 0);
+
+                r6Engine.parts = { head, torso, la, ra, ll, rl };
+                r6Engine.group.add(head, torso, la, ra, ll, rl);
+                r6Engine.scene.add(r6Engine.group);
+
+                app.updateR6Color(true);
+                app.animateR6();
+            },
+
+            animateR6: () => {
+                requestAnimationFrame(app.animateR6);
+                const time = r6Engine.clock.getElapsedTime();
+                if(r6Engine.group) {
+                    r6Engine.group.rotation.y = Math.sin(time * 0.5) * 0.2;
+                    r6Engine.parts.la.rotation.x = Math.sin(time * 2) * 0.2;
+                    r6Engine.parts.ra.rotation.x = -Math.sin(time * 2) * 0.2;
+                }
+                r6Engine.renderer.render(r6Engine.scene, r6Engine.camera);
+            },
+
+            updateR6Color: (init = false) => {
+                const ac = init ? (userData.avatarColors || defaultAvatarColors) : {
+                    head: document.getElementById('col-head').value,
+                    torso: document.getElementById('col-torso').value,
+                    arms: document.getElementById('col-arms').value,
+                    legs: document.getElementById('col-legs').value
+                };
+                
+                if(r6Engine.parts.head) {
+                    r6Engine.parts.head.material.color.set(ac.head);
+                    r6Engine.parts.torso.material.color.set(ac.torso);
+                    r6Engine.parts.la.material.color.set(ac.arms);
+                    r6Engine.parts.ra.material.color.set(ac.arms);
+                    r6Engine.parts.ll.material.color.set(ac.legs);
+                    r6Engine.parts.rl.material.color.set(ac.legs);
+                }
+            },
+
+            saveAvatarR6: async () => {
+                const newColors = {
+                    head: document.getElementById('col-head').value,
+                    torso: document.getElementById('col-torso').value,
+                    arms: document.getElementById('col-arms').value,
+                    legs: document.getElementById('col-legs').value
+                };
+
+                // Profil resmini güncelle
+                const url = r6Engine.renderer.domElement.toDataURL();
+                document.getElementById('nav-avatar-img').src = url;
+                document.getElementById('profile-img-lg').src = url;
+                
+                try {
+                    const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+                    await updateDoc(userRef, { avatarColors: newColors });
+                    userData.avatarColors = newColors;
+                    SwalToast.fire({icon:'success', title:'Avatar güncellendi'});
+                } catch(e) {
+                    SwalToast.fire({icon:'error', title:'Kayıt başarısız'});
+                }
+            },
+            
+            resizeR6: () => {
+                const p = document.getElementById('r6-canvas').parentElement;
+                if(p && r6Engine.renderer) {
+                    r6Engine.camera.aspect = p.clientWidth / p.clientHeight;
+                    r6Engine.camera.updateProjectionMatrix();
+                    r6Engine.renderer.setSize(p.clientWidth, p.clientHeight);
+                }
+            },
+
+            // 7. YARDIMCILAR
+            loadGroups: async () => {
+                const list = document.getElementById('groups-list');
+                try {
+                    const ref = collection(db, 'artifacts', appId, 'public', 'data', 'groups');
+                    const snap = await getDocs(ref);
+                    
+                    list.innerHTML = snap.empty ? '<div class="text-gray-500">Grup yok.</div>' : '';
+                    snap.forEach(doc => {
+                         const g = doc.data();
+                         list.innerHTML += `
+                            <div class="glass p-4 rounded-xl flex justify-between items-center">
+                                <h3 class="font-bold text-white">${g.name}</h3>
+                                <button class="text-xs bg-surface border border-gray-600 px-2 py-1 rounded">Katıl</button>
+                            </div>
+                         `;
+                    });
+                } catch(e) { list.innerHTML = 'Hata'; }
+            },
+
+            createGroupPrompt: async () => {
+                if(userData.renax < 100) return Swal.fire("Yetersiz Renax", "100 Renax gerekiyor.", "warning");
+                const { value: name } = await Swal.fire({ title: 'Grup Adı', input: 'text' });
+                if(name) {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'groups'), {
+                        name, ownerId: currentUser.uid, memberCount: 1
+                    });
+                    // Parayı düş
+                    const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+                    await updateDoc(userRef, { renax: userData.renax - 100 });
+                    userData.renax -= 100;
+                    app.updateUI();
+                    app.loadGroups();
+                }
+            },
+
+            loadShop: () => {
+                 const grid = document.getElementById('shop-grid');
+                 const items = [{n:'Gözlük', p:50, i:'fa-glasses'}, {n:'Şapka', p:75, i:'fa-hat-cowboy'}, {n:'Kulaklık', p:120, i:'fa-headphones'}];
+                 grid.innerHTML = items.map(x => `
+                    <div class="glass p-4 rounded-xl flex flex-col items-center hover:border-primary cursor-pointer" onclick="app.buyItem('${x.n}', ${x.p})">
+                        <i class="fa-solid ${x.i} text-3xl mb-2 text-secondary"></i>
+                        <div class="font-bold text-sm">${x.n}</div>
+                        <div class="text-gold text-xs">${x.p} R</div>
+                    </div>
+                 `).join('');
+            },
+
+            buyItem: async (name, price) => {
+                if(userData.renax < price) return SwalToast.fire({icon:'error', title:'Para yetersiz'});
+                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+                await updateDoc(userRef, { renax: userData.renax - price });
+                userData.renax -= price;
+                app.updateUI();
+                Swal.fire("Satın Alındı", `${name} envantere eklendi.`, "success");
+            },
+
+            loadAssets: async () => {
+                const grid = document.getElementById('assets-grid');
+                grid.innerHTML = '<div class="text-gray-500 col-span-full">Dosya yükleme özelliği şu an bakımda.</div>';
+            },
+
+            insertCode: (t) => {
+                document.getElementById('game-code').value = `<html>\n<body style="margin:0; overflow:hidden; background:#000; color:white; display:flex; justify-content:center; align-items:center;">\n  <h1>Merhaba Dünya</h1>\n  <script>\n    window.addEventListener('message', e => {\n       if(e.data.type === 'JOYSTICK') console.log(e.data.data);\n    });\n  <\/script>\n</body>\n</html>`;
+            },
+            
+            testGame: () => {
+                app.playGame(JSON.stringify({ code: document.getElementById('game-code').value, title: 'Test' }));
+            },
+
+            playGame: (str) => {
+                const g = JSON.parse(decodeURIComponent(str));
+                document.getElementById('play-modal').classList.remove('hidden');
+                document.getElementById('play-title').innerText = g.title;
+                const frame = document.getElementById('play-frame');
+                frame.srcdoc = g.code;
+                
+                if(window.innerWidth < 1024) document.getElementById('mobile-controls').classList.remove('hidden');
+                
+                frame.onload = () => {
+                    if(window.jm) window.jm.destroy();
+                    const zone = document.getElementById('joystick-area');
+                    window.jm = nipplejs.create({ zone, mode:'static', position:{left:'50%', top:'50%'}, color:'white' });
+                    window.jm.on('move', (e, d) => frame.contentWindow.postMessage({type:'JOYSTICK', data:d}, '*'));
+                    
+                    const btn = document.getElementById('jump-btn');
+                    const jump = () => frame.contentWindow.postMessage({type:'JUMP'}, '*');
+                    btn.ontouchstart = btn.onmousedown = jump;
+                }
+            },
+
+            closeGame: () => {
+                document.getElementById('play-modal').classList.add('hidden');
+                document.getElementById('play-frame').srcdoc = '';
+                if(window.jm) window.jm.destroy();
+            }
+        };
+
+        app.init();
+    </script>
+</body>
+</html>
+
